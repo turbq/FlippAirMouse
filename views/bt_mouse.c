@@ -28,6 +28,7 @@ struct BtMouse {
     FuriMutex* mutex;
     FuriThread* thread;
     bool connected;
+    bool invert_axis;
 
     // Current mouse state
     uint8_t btn;
@@ -86,6 +87,17 @@ static void bt_mouse_button_state(BtMouse* bt_mouse, int8_t button, bool state) 
 }
 
 static void bt_mouse_process(BtMouse* bt_mouse, InputEvent* event) {
+    int8_t left, right, scroll;
+
+    if(bt_mouse->invert_axis) {
+        left = HID_MOUSE_BTN_RIGHT;
+        right = HID_MOUSE_BTN_LEFT;
+        scroll = -MOUSE_SCROLL;
+    } else {
+        left = HID_MOUSE_BTN_LEFT;
+        right = HID_MOUSE_BTN_RIGHT;
+        scroll = MOUSE_SCROLL;
+    }
     with_view_model(
         bt_mouse->view,
         void* model,
@@ -93,15 +105,15 @@ static void bt_mouse_process(BtMouse* bt_mouse, InputEvent* event) {
             UNUSED(model);
             if(event->key == InputKeyUp) {
                 if(event->type == InputTypePress) {
-                    bt_mouse_button_state(bt_mouse, HID_MOUSE_BTN_LEFT, true);
+                    bt_mouse_button_state(bt_mouse, left, true);
                 } else if(event->type == InputTypeRelease) {
-                    bt_mouse_button_state(bt_mouse, HID_MOUSE_BTN_LEFT, false);
+                    bt_mouse_button_state(bt_mouse, left, false);
                 }
             } else if(event->key == InputKeyDown) {
                 if(event->type == InputTypePress) {
-                    bt_mouse_button_state(bt_mouse, HID_MOUSE_BTN_RIGHT, true);
+                    bt_mouse_button_state(bt_mouse, right, true);
                 } else if(event->type == InputTypeRelease) {
-                    bt_mouse_button_state(bt_mouse, HID_MOUSE_BTN_RIGHT, false);
+                    bt_mouse_button_state(bt_mouse, right, false);
                 }
             } else if(event->key == InputKeyOk) {
                 if(event->type == InputTypePress) {
@@ -111,12 +123,18 @@ static void bt_mouse_process(BtMouse* bt_mouse, InputEvent* event) {
                 }
             } else if(event->key == InputKeyRight) {
                 if(event->type == InputTypePress || event->type == InputTypeRepeat) {
-                    bt_mouse->wheel = MOUSE_SCROLL;
+                    bt_mouse->wheel = scroll;
                 }
             } else if(event->key == InputKeyLeft) {
                 if(event->type == InputTypePress || event->type == InputTypeRepeat) {
-                    bt_mouse->wheel = -MOUSE_SCROLL;
+                    bt_mouse->wheel = -scroll;
                 }
+            } else if(event->key == InputKeyBack) {
+                if(event->type == InputTypePress) {
+                } else if(event->type == InputTypeRelease) {
+                    bt_mouse->invert_axis = !bt_mouse->invert_axis;
+                }
+
             }
         },
         true);
@@ -160,6 +178,8 @@ bool bt_mouse_move(int8_t dx, int8_t dy, void* context) {
     furi_assert(context);
     BtMouse* bt_mouse = context;
 
+    if(bt_mouse->invert_axis)
+        dy = -dy;
     if(bt_mouse->connected) {
         furi_mutex_acquire(bt_mouse->mutex, FuriWaitForever);
         bt_mouse->dx += dx;
